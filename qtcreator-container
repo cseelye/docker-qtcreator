@@ -1,0 +1,69 @@
+#!/bin/bash
+
+DOCKER_BINARY=/usr/local/bin/docker
+IMAGE_NAME=cseelye/qtcreator:latest
+BASE_CONTAINER_NAME=qtcreator
+
+function log()
+{
+    if [[ $# == 0 ]]; then
+        logger -is -t QtCreatorLinux
+    else
+        logger -is -t QtCreatorLinux $@
+    fi
+}
+
+#logger -is -t QtCreatorLinux Dumping environment ========================================================
+#env | logger -is -t QtCreatorLinux
+#logger -is -t QtCreatorLinux Finished dumping environment ========================================================
+log "Dumping environment ========================================================"
+env | log
+log "Finished dumping environment ========================================================"
+
+# Find the IP address to use in the DISPLAY variable
+original_IFS=${IFS}
+IFS=$'\n'
+for service in $(/usr/sbin/networksetup -listnetworkserviceorder | grep '([0123456789])' | cut -d' ' -f2-); do
+    host_ip=$(/usr/sbin/networksetup -getinfo "${service}" | grep "^IP address" | cut -d' ' -f3 || true)
+    [[ -n ${host_ip} ]] && break
+done
+IFS=${original_IFS}
+container_display=${host_ip}:0
+
+# Find any other running instances so we can create a unique name
+index=$("${DOCKER_BINARY}" container ls --all --format '{{.Names}}' | grep ${BASE_CONTAINER_NAME} | cut -d. -f2 | sort | tail -n1 || echo 0)
+(( index++ )) || true
+container_name=${BASE_CONTAINER_NAME}.${index}
+
+log "Container DISPLAY will be ${container_display}"
+log "${HOME} will be mounted as /root/home in the container"
+log "Container will be named ${container_name}"
+
+# Set up a trap to stop the container
+container_id=""
+function quit()
+{
+    trap '' HUP INT QUIT TERM EXIT
+    log "Stopping container..."
+    "${DOCKER_BINARY}" container kill ${container_name}
+
+#    if [[ -n ${container_id} ]]; then
+#        log "Stopping container..."
+#        "${DOCKER_BINARY}" container kill ${container_id} || true
+#    fi
+    log "Exiting"
+    exit 0
+}
+trap 'quit' HUP INT QUIT TERM EXIT
+
+# Launch the container
+log "Launching container..."
+"${DOCKER_BINARY}" container run \
+    --rm \
+    --env DISPLAY=${container_display} \
+    --volume ${HOME}:/root/home \
+    --name ${container_name} \
+    ${IMAGE_NAME} &
+
+wait $!
+
