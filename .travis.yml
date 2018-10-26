@@ -22,9 +22,6 @@ jobs:
           before_deploy: docker login -u "$DOCKER_HUB_USERNAME" -p "$DOCKER_HUB_PASSWORD"
           deploy:
               provider: script
-              script:
-                  - docker push $REPO_NAME/$IMAGE_NAME:$IMAGE_TAG
-                  - docker tag $REPO_NAME/$IMAGE_NAME:$IMAGE_TAG $REPO_NAME/$IMAGE_NAME:latest
-                  - docker push $REPO_NAME/$IMAGE_NAME:latest
+              script: docker push $REPO_NAME/$IMAGE_NAME:$IMAGE_TAG && docker tag $REPO_NAME/$IMAGE_NAME:$IMAGE_TAG $REPO_NAME/$IMAGE_NAME:latest && docker push $REPO_NAME/$IMAGE_NAME:latest
               on:
                   tags: true
