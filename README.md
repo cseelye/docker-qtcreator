@@ -1,8 +1,8 @@
 # docker-qtcreator [![Build Status](https://travis-ci.org/cseelye/docker-qtcreator.svg?branch=master)](https://travis-ci.org/cseelye/docker-qtcreator)
 Run Qt Creator in a docker container
 
-Docker Hub: https://hub.docker.com/r/cseelye/linux-shell/  
-Github: https://github.com/cseelye/docker-linux-shell
+Docker Hub: https://hub.docker.com/r/cseelye/qtcreator/  
+Github: https://github.com/cseelye/docker-qtcreator
 
 I created this primarily for doing linux development on Mac OS; this allows the clang code model or language server to run in a linux environment so that parsing/code completion/etc work correctly for a linux codebase.
 
