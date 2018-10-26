@@ -1,8 +1,18 @@
 #!/bin/bash
+set -x
 
-DOCKER_BINARY=/usr/local/bin/docker
-IMAGE_NAME=cseelye/qtcreator:latest
-BASE_CONTAINER_NAME=qtcreator
+DOCKER_BINARY=${DOCKER_BINARY-}
+IMAGE_NAME=${IMAGE_NAME:-cseelye/qtcreator:latest}
+BASE_CONTAINER_NAME=${BASE_CONTAINER_NAME:-qtcreator}
+
+for possible in "$(which docker || true)" /usr/bin/docker /usr/local/bin/docker; do
+    if [[ -e ${possible} ]]; then
+        DOCKER_BINARY="${possible}"
+    fi
+done
+if [[ -z ${DOCKER_BINARY} || ! -x ${DOCKER_BINARY} ]]; then
+    log "Could not find docker binary"
+fi
 
 function log()
 {
@@ -13,22 +23,28 @@ function log()
     fi
 }
 
-#logger -is -t QtCreatorLinux Dumping environment ========================================================
-#env | logger -is -t QtCreatorLinux
-#logger -is -t QtCreatorLinux Finished dumping environment ========================================================
-log "Dumping environment ========================================================"
-env | log
-log "Finished dumping environment ========================================================"
+#log "Dumping environment ========================================================"
+#env | log
+#log "Finished dumping environment ========================================================"
 
-# Find the IP address to use in the DISPLAY variable
-original_IFS=${IFS}
-IFS=$'\n'
-for service in $(/usr/sbin/networksetup -listnetworkserviceorder | grep '([0123456789])' | cut -d' ' -f2-); do
-    host_ip=$(/usr/sbin/networksetup -getinfo "${service}" | grep "^IP address" | cut -d' ' -f3 || true)
-    [[ -n ${host_ip} ]] && break
-done
-IFS=${original_IFS}
-container_display=${host_ip}:0
+display_number=${DISPLAY##*:}
+if [[ $(uname) == "Darwin" ]]; then
+    # Find the IP address to use in the DISPLAY variable
+    original_IFS=${IFS}
+    IFS=$'\n'
+    for service in $(/usr/sbin/networksetup -listnetworkserviceorder | grep '([0123456789])' | cut -d' ' -f2-); do
+        host_ip=$(/usr/sbin/networksetup -getinfo "${service}" | grep "^IP address" | cut -d' ' -f3 || true)
+        [[ -n ${host_ip} ]] && break
+    done
+    IFS=${original_IFS}
+    container_display=${host_ip}:${display_number}
+else
+    container_display=unix:${display_number}
+fi
+x11_socket=""
+if [[ -e /tmp/.X11-unix ]]; then
+    x11_socket="--volume /tmp/.X11-unix:/tmp/.X11-unix"
+fi
 
 # Find any other running instances so we can create a unique name
 index=$("${DOCKER_BINARY}" container ls --all --format '{{.Names}}' | grep ${BASE_CONTAINER_NAME} | cut -d. -f2 | sort | tail -n1 || echo 0)
@@ -44,13 +60,10 @@ container_id=""
 function quit()
 {
     trap '' HUP INT QUIT TERM EXIT
-    log "Stopping container..."
-    "${DOCKER_BINARY}" container kill ${container_name}
-
-#    if [[ -n ${container_id} ]]; then
-#        log "Stopping container..."
-#        "${DOCKER_BINARY}" container kill ${container_id} || true
-#    fi
+    if "${DOCKER_BINARY}" container ls --format '{{.Names}}' | grep -q ${container_name}; then
+        log "Stopping container..."
+        "${DOCKER_BINARY}" container kill ${container_name}
+    fi
     log "Exiting"
     exit 0
 }
@@ -61,9 +74,9 @@ log "Launching container..."
 "${DOCKER_BINARY}" container run \
     --rm \
     --env DISPLAY=${container_display} \
+    ${x11_socket} \
     --volume ${HOME}:/root/home \
     --name ${container_name} \
     ${IMAGE_NAME} &
 
 wait $!
-
